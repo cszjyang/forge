@@ -1,0 +1,35 @@
+diff --git a/src/server_mm.cc b/src/server_mm.cc
+index b027bf9..05616a4 100644
+--- a/src/server_mm.cc
++++ b/src/server_mm.cc
+@@ -16,7 +16,10 @@
+ ServerMM::ServerMM(const DMCConfig* conf, struct ibv_pd* pd) {
+   segment_size_ = conf->segment_size;
+   base_addr_ = conf->server_base_addr;
+-  base_len_ = conf->server_data_len;
++  uint32_t list_size = get_list_size(HASH_NUM_BUCKETS * HASH_BUCKET_ASSOC_NUM);
++  uint64_t stateful_area_len =
++      STATEFUL_SAPCE_SIZE > list_size ? STATEFUL_SAPCE_SIZE : list_size;
++  base_len_ = HASH_SPACE_SIZE + stateful_area_len + conf->server_data_len;
+   elastic_mem_ = conf->elastic_mem;
+ 
+   // allocate data area
+@@ -29,16 +32,15 @@ ServerMM::ServerMM(const DMCConfig* conf, struct ibv_pd* pd) {
+     assert(0);
+   }
+ 
+-  uint32_t list_size = get_list_size(HASH_NUM_BUCKETS * HASH_BUCKET_ASSOC_NUM);
+   index_area_addr_ = base_addr_;
+   index_area_len_ = HASH_SPACE_SIZE;
+   printd(L_INFO, "hash_size: %ld, %ld\n", index_area_len_,
+          ROUNDUP(sizeof(Table), 1024));
+   stateful_area_addr_ = base_addr_ + index_area_len_;
+-  stateful_area_len_ =
+-      STATEFUL_SAPCE_SIZE > list_size ? STATEFUL_SAPCE_SIZE : list_size;
++  stateful_area_len_ = stateful_area_len;
+   free_space_addr_ = stateful_area_addr_ + stateful_area_len_;
+   free_space_len_ = base_len_ - index_area_len_ - stateful_area_len_;
++  assert(free_space_len_ == conf->server_data_len);
+   printf("cache size: %ld\n", free_space_len_ / conf->block_size);
+ 
+   printd(L_INFO,
