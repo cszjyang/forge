@@ -159,13 +159,28 @@ restart_memcached() {
 
 check_memcached() {
   local memcached_ip="$1"
-  python3 - "$memcached_ip" <<'PY'
+  python3 - "$memcached_ip" "$MEMCACHED_PORT" <<'PY'
 import socket
 import sys
+import time
 
 ip = sys.argv[1]
-with socket.create_connection((ip, 11211), timeout=3):
-    pass
+port = int(sys.argv[2])
+attempts = 10
+delay_seconds = 0.5
+last_error = None
+
+for attempt in range(1, attempts + 1):
+    try:
+        with socket.create_connection((ip, port), timeout=1):
+            raise SystemExit(0)
+    except OSError as exc:
+        last_error = exc
+        if attempt < attempts:
+            time.sleep(delay_seconds)
+
+print(last_error, file=sys.stderr)
+raise SystemExit(1)
 PY
 }
 

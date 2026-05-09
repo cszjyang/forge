@@ -1,7 +1,7 @@
 """
 Cluster and experiment settings.
 
-Before running the AEC scripts, adjust the cluster settings below for your
+Before running the experiment scripts, adjust the cluster settings below for your
 machines and project path.
 """
 
