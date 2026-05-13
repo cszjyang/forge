@@ -28,10 +28,6 @@ config_dir = f"{FORGE_HOME}/experiments"
 PYTHON_ENV = f"{FORGE_HOME}/.venv"
 env_cmd = f"export PATH={PYTHON_ENV}/bin:$PATH"
 
-# By default, the controller holds the authoritative project copy for rsync.
-# Change this only if you keep the source tree on a different node.
-RSYNC_SOURCE_HOST = controller
-
 
 # Workload catalog shared by the controller and offline workload-setting tools.
 ycsb_wl_list = ['ycsba', 'ycsbb', 'ycsbc', 'ycsbd', 'ycsbe']

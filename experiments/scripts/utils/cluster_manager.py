@@ -1,11 +1,12 @@
 from fabric import Connection
 import json
+import os
 import shlex
+import subprocess
 import time
 
 from utils.settings import (
     FORGE_HOME,
-    RSYNC_SOURCE_HOST,
     build_dir,
     cn_list,
     config_dir,
@@ -44,6 +45,7 @@ RSYNC_EXCLUDES = [
     "build/",
     ".venv/",
     ".env",
+    ".cache/",
     "*.log",
     "experiments/workloads.tar.gz",
     "experiments/more_workloads.tar.gz",
@@ -112,6 +114,14 @@ def _format_command_error(node, cmd, err):
     return "\n".join([
         f"[cluster] command failed on {node}",
         f"  command: {cmd}",
+        f"  error: {_short_error(err)}",
+    ])
+
+
+def _format_local_command_error(cmd_args, err):
+    return "\n".join([
+        "[cluster] local command failed",
+        f"  command: {shlex.join(cmd_args)}",
         f"  error: {_short_error(err)}",
     ])
 
@@ -209,33 +219,39 @@ class ClusterManager(object):
         self.execute_all(RESET_CMD, dry_run=dry_run)
         
     def rsync_project(self, dry_run=False):
-        source = _connection_name(RSYNC_SOURCE_HOST, user)
-        if source not in self._cluster_ips:
-            raise ClusterCommandError(f"RSYNC_SOURCE_HOST {source} must be in server_list")
-        source_id = self._cluster_ips.index(source)
-
         ssh_opts = shlex.join(["ssh", *_ssh_options(RSYNC_SSH_EXTRA_OPTIONS)])
-        exclude_opts = " ".join(f"--exclude={shlex.quote(pattern)}" for pattern in RSYNC_EXCLUDES)
-        source_path = f"{FORGE_HOME.rstrip('/')}/"
-        promises = []
+        source_path = os.path.join(os.path.abspath(os.path.expanduser(FORGE_HOME)), "")
+        if not dry_run and not os.path.isdir(source_path):
+            raise ClusterCommandError(f"local FORGE_HOME source path does not exist: {source_path}")
         errors = []
         for node_id in self._uniq_conn_indexes:
             target = self._cluster_ips[node_id]
-            if target == source:
-                continue
             target_path = f"{target}:{FORGE_HOME.rstrip('/')}/"
-            rsync_cmd = f"rsync -az --delete -e \"{ssh_opts}\" {exclude_opts} {source_path} {target_path}"
+            rsync_cmd = [
+                "rsync",
+                "-az",
+                "--delete",
+                "-e",
+                ssh_opts,
+                *(f"--exclude={pattern}" for pattern in RSYNC_EXCLUDES),
+                source_path,
+                target_path,
+            ]
+            if dry_run:
+                print(f"LOCAL: {shlex.join(rsync_cmd)}")
+                continue
+            if self.verbose:
+                print(f"[cluster] local: {shlex.join(rsync_cmd)}")
             try:
-                promise = self.execute_on_node(source_id, rsync_cmd, timeout=600, dry_run=dry_run)
-                if not dry_run:
-                    promises.append(promise)
-            except ClusterCommandError as err:
-                errors.append(str(err))
-        for promise in promises:
-            try:
-                self._join_promise(promise)
-            except ClusterCommandError as err:
-                errors.append(str(err))
+                subprocess.run(
+                    rsync_cmd,
+                    capture_output=not self.verbose,
+                    text=True,
+                    timeout=600,
+                    check=True,
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as err:
+                errors.append(_format_local_command_error(rsync_cmd, err))
         if errors:
             raise ClusterCommandError("\n".join(errors))
         self.execute_all(MEMORY_CONFIG_CMD, dry_run=dry_run)

@@ -1,18 +1,22 @@
 import argparse
+import os
 
 from utils.cluster_manager import ClusterManager, cluster_ips
-from utils.settings import FORGE_HOME, RSYNC_SOURCE_HOST
+from utils.settings import FORGE_HOME
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Push the FORGE project from RSYNC_SOURCE_HOST to all other nodes."
+        description="Push the local FORGE project to all configured cluster nodes."
     )
-    parser.parse_args()
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print rsync and configuration commands without running them")
+    args = parser.parse_args()
 
     cluster_manager = ClusterManager(cluster_ips, FORGE_HOME)
-    print(f"Pushing project from {RSYNC_SOURCE_HOST}:{FORGE_HOME} to all other nodes")
-    cluster_manager.rsync_project()
+    source_path = os.path.abspath(os.path.expanduser(FORGE_HOME))
+    print(f"Pushing local project from {source_path} to configured cluster nodes")
+    cluster_manager.rsync_project(dry_run=args.dry_run)
     print("Done")
 
 
